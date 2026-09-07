@@ -187,6 +187,20 @@ export async function generateMusic(params: {
     return { bytes, mimeType: blob.type || "audio/wav" };
   };
 
+  const elevenlabs = async () => {
+    const key = optionalEnv("ELEVENLABS_API_KEY");
+    if (!key) throw new Error("ELEVENLABS_API_KEY absente");
+    const res = await fetch("https://api.elevenlabs.io/v1/music", {
+      method: "POST",
+      headers: { "xi-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: params.prompt, music_length_ms: seconds * 1000 }),
+    });
+    if (!res.ok) throw new Error(`ElevenLabs [${res.status}] ${(await res.text()).slice(0, 300)}`);
+    return {
+      bytes: new Uint8Array(await res.arrayBuffer()),
+      mimeType: res.headers.get("content-type")?.split(";")[0] || "audio/mpeg",
+    };
+  };
 
   const replicate = async () => {
     const model = optionalEnv("REPLICATE_MUSIC_MODEL") ?? "meta/musicgen";
@@ -199,10 +213,15 @@ export async function generateMusic(params: {
   };
 
   const map: Record<string, () => Promise<{ bytes: Uint8Array; mimeType: string }>> = {
+    elevenlabs,
     huggingface: hf,
     replicate,
   };
-  const order = params.provider && params.provider !== "auto" ? [params.provider] : ["huggingface", "replicate"];
+  const order =
+    params.provider && params.provider !== "auto"
+      ? [params.provider]
+      : ["elevenlabs", "huggingface", "replicate"];
+
   const result = await withFallback(
     "la génération de musique",
     order.filter((n) => map[n]).map((name) => ({ name, run: map[name]! })),
