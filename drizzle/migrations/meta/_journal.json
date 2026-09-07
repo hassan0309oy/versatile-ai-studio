@@ -8,6 +8,13 @@
       "when": 1788818787345,
       "tag": "0000_deerflow_core",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788822497810,
+      "tag": "0001_deerflow_core_tables",
+      "breakpoints": true
     }
   ]
 }
