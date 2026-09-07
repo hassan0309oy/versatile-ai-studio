@@ -17,9 +17,19 @@ export async function replicateRun(
   const [refBeforeColon, versionAfterColon] = modelRef.split(":");
 
   async function create(url: string, body: unknown) {
-    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-    return { ok: res.ok, status: res.status, text: await res.text() };
+    // Limite de débit Replicate (429) : on patiente le délai indiqué, jusqu'à 3 essais.
+    for (let i = 0; ; i++) {
+      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+      const text = await res.text();
+      if (res.status === 429 && i < 3) {
+        const wait = Number(res.headers.get("retry-after")) || 12;
+        await new Promise((r) => setTimeout(r, wait * 1000));
+        continue;
+      }
+      return { ok: res.ok, status: res.status, text };
+    }
   }
+
 
   let attempt = isVersionHash
     ? await create("https://api.replicate.com/v1/predictions", { version: modelRef, input })
