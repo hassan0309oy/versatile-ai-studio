@@ -12,4 +12,14 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    resolve: {
+      alias: {
+        // pkce-challenge (dépendance MCP) n'expose pas de build compatible avec le
+        // runtime serveur : on pointe sur sa version Web Crypto, qui elle fonctionne.
+        "pkce-challenge": "pkce-challenge/dist/index.browser.js",
+      },
+    },
+  },
 });
+
