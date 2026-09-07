@@ -1,5 +1,7 @@
 import { storeAsset, type StoredAsset } from "./storage.server";
 import { optionalEnv, withFallback } from "./errors.server";
+import { downloadBytes, replicateRun } from "./replicate.server";
+
 
 const ELEVEN_DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM"; // Rachel
 
@@ -157,58 +159,39 @@ export async function synthesizePodcast(params: {
   return { ...asset, segments: params.segments.length };
 }
 
-/** Musique — Hugging Face (MusicGen / Stable Audio), modèle configurable. */
+/** Musique — Hugging Face (Stable Audio / MusicGen) puis Replicate, modèles configurables. */
 export async function generateMusic(params: {
   prompt: string;
   provider?: string;
   durationSeconds?: number;
 }): Promise<StoredAsset> {
+  const seconds = Math.min(60, Math.max(5, Math.round(params.durationSeconds ?? 15)));
+
   const hf = async () => {
     const token = optionalEnv("HF_TOKEN");
     if (!token) throw new Error("HF_TOKEN absente");
-    const model = optionalEnv("HF_MUSIC_MODEL") ?? "facebook/musicgen-small";
-    const res = await fetch(`https://router.huggingface.co/hf-inference/models/${model}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inputs: params.prompt,
-        parameters: { duration: params.durationSeconds ?? 15 },
-      }),
-    });
-    if (!res.ok) throw new Error(`Hugging Face [${res.status}] ${(await res.text()).slice(0, 400)}`);
-    const type = res.headers.get("content-type") ?? "audio/wav";
-    if (type.includes("json")) throw new Error(`Hugging Face : ${(await res.text()).slice(0, 300)}`);
-    return { bytes: new Uint8Array(await res.arrayBuffer()), mimeType: type.split(";")[0]! };
+    const model = optionalEnv("HF_MUSIC_MODEL") ?? "stabilityai/stable-audio-open-1.0";
+    const { InferenceClient } = await import("@huggingface/inference");
+    // provider « auto » : Hugging Face route vers un fournisseur qui sert réellement le modèle.
+    const blob = (await new InferenceClient(token).textToSpeech({
+      model,
+      provider: "auto",
+      inputs: params.prompt,
+      parameters: { seconds_total: seconds } as never,
+    })) as unknown as Blob;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (bytes.byteLength < 1000) throw new Error("Hugging Face a renvoyé un fichier audio vide");
+    return { bytes, mimeType: blob.type || "audio/wav" };
   };
 
   const replicate = async () => {
-    const key = optionalEnv("REPLICATE_API_TOKEN");
-    if (!key) throw new Error("REPLICATE_API_TOKEN absente");
-    const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
-    const created = (await (
-      await fetch("https://api.replicate.com/v1/predictions", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          version: optionalEnv("REPLICATE_MUSIC_MODEL") ?? "meta/musicgen",
-          input: { prompt: params.prompt, duration: params.durationSeconds ?? 15 },
-        }),
-      })
-    ).json()) as { id?: string; detail?: string };
-    if (!created.id) throw new Error(created.detail ?? "Replicate a refusé la demande");
-    const deadline = Date.now() + 5 * 60 * 1000;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 4000));
-      const st = (await (
-        await fetch(`https://api.replicate.com/v1/predictions/${created.id}`, { headers })
-      ).json()) as { status: string; output?: string; error?: string };
-      if (st.status === "succeeded" && st.output) {
-        const f = await fetch(st.output);
-        return { bytes: new Uint8Array(await f.arrayBuffer()), mimeType: "audio/wav" };
-      }
-      if (st.status === "failed") throw new Error(st.error ?? "échec Replicate");
-    }
-    throw new Error("Replicate : délai dépassé");
+    const model = optionalEnv("REPLICATE_MUSIC_MODEL") ?? "meta/musicgen";
+    const url = await replicateRun(model, {
+      prompt: params.prompt,
+      duration: seconds,
+      output_format: "wav",
+    });
+    return downloadBytes(url, "audio/wav");
   };
 
   const map: Record<string, () => Promise<{ bytes: Uint8Array; mimeType: string }>> = {
@@ -229,3 +212,4 @@ export async function generateMusic(params: {
     metadata: { music: true },
   });
 }
+
