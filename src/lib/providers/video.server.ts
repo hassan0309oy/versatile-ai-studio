@@ -1,5 +1,6 @@
 import { storeAsset, type StoredAsset } from "./storage.server";
 import { httpJson, optionalEnv, withFallback } from "./errors.server";
+import { downloadBytes, replicateRun } from "./replicate.server";
 
 type Gen = { prompt: string; provider?: string; durationSeconds?: number };
 
@@ -15,14 +16,18 @@ async function runwayVideo({ prompt, durationSeconds }: Gen) {
     "X-Runway-Version": RUNWAY_VERSION,
   };
 
+  // veo3 a été retiré par Runway : veo3.1 n'accepte que des clips de 8 secondes.
+  const model = optionalEnv("RUNWAY_VIDEO_MODEL") ?? "veo3.1";
+  const duration = model.startsWith("veo") ? 8 : (durationSeconds ?? 8);
+
   const task = await httpJson<{ id: string }>("https://api.dev.runwayml.com/v1/text_to_video", {
     method: "POST",
     headers,
     body: JSON.stringify({
-      model: "veo3",
+      model,
       promptText: prompt,
-      ratio: "1280:720",
-      duration: durationSeconds ?? 8,
+      ratio: optionalEnv("RUNWAY_VIDEO_RATIO") ?? "1280:720",
+      duration,
     }),
   });
 
@@ -36,9 +41,7 @@ async function runwayVideo({ prompt, durationSeconds }: Gen) {
       failureCode?: string;
     }>(`https://api.dev.runwayml.com/v1/tasks/${task.id}`, { headers });
     if (status.status === "SUCCEEDED" && status.output?.[0]) {
-      const file = await fetch(status.output[0]);
-      if (!file.ok) throw new Error(`Téléchargement de la vidéo échoué [${file.status}]`);
-      return { bytes: new Uint8Array(await file.arrayBuffer()), mimeType: "video/mp4" };
+      return downloadBytes(status.output[0], "video/mp4");
     }
     if (status.status === "FAILED") {
       throw new Error(`Runway a échoué : ${status.failure ?? status.failureCode ?? "raison inconnue"}`);
@@ -47,40 +50,53 @@ async function runwayVideo({ prompt, durationSeconds }: Gen) {
   throw new Error("Runway : délai dépassé (plus de 8 minutes)");
 }
 
-/** Replicate, si une clé est fournie (fournisseur interchangeable). */
+/** Replicate, fournisseur interchangeable. */
 async function replicateVideo({ prompt }: Gen) {
-  const key = optionalEnv("REPLICATE_API_TOKEN");
-  if (!key) throw new Error("REPLICATE_API_TOKEN absente");
+  const model = optionalEnv("REPLICATE_VIDEO_MODEL") ?? "minimax/video-01";
+  const url = await replicateRun(model, { prompt });
+  return downloadBytes(url, "video/mp4");
+}
+
+/** Passerelle Lovable AI — vidéo intégrée, aucune clé fournisseur externe requise. */
+async function lovableVideo({ prompt, durationSeconds }: Gen) {
+  const key = optionalEnv("LOVABLE_API_KEY");
+  if (!key) throw new Error("LOVABLE_API_KEY absente");
   const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
-  const created = await httpJson<{ id: string }>("https://api.replicate.com/v1/predictions", {
+  const seconds = Math.min(10, Math.max(3, Math.round(durationSeconds ?? 8)));
+
+  const job = await httpJson<{ id: string }>("https://ai.gateway.lovable.dev/v1/videos", {
     method: "POST",
     headers,
     body: JSON.stringify({
-      version: optionalEnv("REPLICATE_VIDEO_MODEL") ?? "minimax/video-01",
-      input: { prompt },
+      model: optionalEnv("LOVABLE_VIDEO_MODEL") ?? "google/gemini-omni-1.1-flash",
+      input: prompt,
+      response_format: { type: "video", resolution: "720p", duration: `${seconds}s` },
     }),
   });
+
   const deadline = Date.now() + 8 * 60 * 1000;
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 5000));
-    const status = await httpJson<{ status: string; output?: string | string[]; error?: string }>(
-      `https://api.replicate.com/v1/predictions/${created.id}`,
+    await new Promise((r) => setTimeout(r, 6000));
+    const status = await httpJson<{ status: string; error?: { message?: string } }>(
+      `https://ai.gateway.lovable.dev/v1/videos/${job.id}`,
       { headers },
     );
-    if (status.status === "succeeded") {
-      const url = Array.isArray(status.output) ? status.output[0] : status.output;
-      if (!url) throw new Error("Replicate n'a renvoyé aucune vidéo");
-      const file = await fetch(url);
+    if (status.status === "completed") {
+      const file = await fetch(`https://ai.gateway.lovable.dev/v1/videos/${job.id}/content`, {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (!file.ok) throw new Error(`Téléchargement de la vidéo échoué [${file.status}]`);
       return { bytes: new Uint8Array(await file.arrayBuffer()), mimeType: "video/mp4" };
     }
-    if (status.status === "failed" || status.status === "canceled") {
-      throw new Error(`Replicate a échoué : ${status.error ?? status.status}`);
+    if (status.status === "failed") {
+      throw new Error(status.error?.message ?? "génération refusée par la passerelle");
     }
   }
-  throw new Error("Replicate : délai dépassé");
+  throw new Error("Passerelle Lovable : délai dépassé");
 }
 
 const PROVIDERS: Record<string, (g: Gen) => Promise<{ bytes: Uint8Array; mimeType: string }>> = {
+  lovable: lovableVideo,
   runway: runwayVideo,
   replicate: replicateVideo,
 };
@@ -88,7 +104,8 @@ const PROVIDERS: Record<string, (g: Gen) => Promise<{ bytes: Uint8Array; mimeTyp
 export const VIDEO_PROVIDERS = Object.keys(PROVIDERS);
 
 export async function generateVideo(gen: Gen): Promise<StoredAsset> {
-  const order = gen.provider && gen.provider !== "auto" ? [gen.provider] : ["runway", "replicate"];
+  const order =
+    gen.provider && gen.provider !== "auto" ? [gen.provider] : ["lovable", "runway", "replicate"];
   const result = await withFallback(
     "la génération de vidéo",
     order.filter((n) => PROVIDERS[n]).map((name) => ({ name, run: () => PROVIDERS[name]!(gen) })),
