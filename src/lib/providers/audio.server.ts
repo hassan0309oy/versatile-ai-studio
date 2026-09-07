@@ -170,19 +170,23 @@ export async function generateMusic(params: {
   const hf = async () => {
     const token = optionalEnv("HF_TOKEN");
     if (!token) throw new Error("HF_TOKEN absente");
-    const model = optionalEnv("HF_MUSIC_MODEL") ?? "stabilityai/stable-audio-open-1.0";
+    const model = optionalEnv("HF_MUSIC_MODEL") ?? "stabilityai/stable-audio-3-medium";
     const { InferenceClient } = await import("@huggingface/inference");
-    // provider « auto » : Hugging Face route vers un fournisseur qui sert réellement le modèle.
-    const blob = (await new InferenceClient(token).textToSpeech({
+    // Tâche « text-to-audio » avec routage automatique vers un fournisseur qui sert le modèle.
+    const client = new InferenceClient(token) as unknown as {
+      textToAudio: (a: Record<string, unknown>) => Promise<Blob>;
+    };
+    const blob = await client.textToAudio({
       model,
       provider: "auto",
       inputs: params.prompt,
-      parameters: { seconds_total: seconds } as never,
-    })) as unknown as Blob;
+      parameters: { seconds_total: seconds },
+    });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     if (bytes.byteLength < 1000) throw new Error("Hugging Face a renvoyé un fichier audio vide");
     return { bytes, mimeType: blob.type || "audio/wav" };
   };
+
 
   const replicate = async () => {
     const model = optionalEnv("REPLICATE_MUSIC_MODEL") ?? "meta/musicgen";

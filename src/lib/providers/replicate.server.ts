@@ -15,23 +15,32 @@ export async function replicateRun(
 
   const isVersionHash = /^[0-9a-f]{40,}$/i.test(modelRef);
   const [refBeforeColon, versionAfterColon] = modelRef.split(":");
-  const url = isVersionHash
-    ? "https://api.replicate.com/v1/predictions"
-    : `https://api.replicate.com/v1/models/${refBeforeColon}/predictions`;
-  const body = isVersionHash
-    ? { version: modelRef, input }
-    : versionAfterColon
-      ? { version: versionAfterColon, input }
-      : { input };
 
-  const createRes = await fetch(
-    versionAfterColon && !isVersionHash ? "https://api.replicate.com/v1/predictions" : url,
-    { method: "POST", headers, body: JSON.stringify(body) },
-  );
-  const createdText = await createRes.text();
-  if (!createRes.ok) throw new Error(`Replicate [${createRes.status}] ${createdText.slice(0, 400)}`);
-  const created = JSON.parse(createdText) as { id?: string; detail?: string };
+  async function create(url: string, body: unknown) {
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+    return { ok: res.ok, status: res.status, text: await res.text() };
+  }
+
+  let attempt = isVersionHash
+    ? await create("https://api.replicate.com/v1/predictions", { version: modelRef, input })
+    : versionAfterColon
+      ? await create("https://api.replicate.com/v1/predictions", { version: versionAfterColon, input })
+      : await create(`https://api.replicate.com/v1/models/${refBeforeColon}/predictions`, { input });
+
+  // Les modèles communautaires n'exposent pas l'endpoint « /models/... » :
+  // on récupère alors la dernière version publiée et on relance.
+  if (!attempt.ok && attempt.status === 404 && !isVersionHash && !versionAfterColon) {
+    const infoRes = await fetch(`https://api.replicate.com/v1/models/${refBeforeColon}`, { headers });
+    const info = (await infoRes.json()) as { latest_version?: { id?: string }; detail?: string };
+    const version = info.latest_version?.id;
+    if (!version) throw new Error(`Replicate : modèle « ${modelRef} » introuvable`);
+    attempt = await create("https://api.replicate.com/v1/predictions", { version, input });
+  }
+
+  if (!attempt.ok) throw new Error(`Replicate [${attempt.status}] ${attempt.text.slice(0, 400)}`);
+  const created = JSON.parse(attempt.text) as { id?: string; detail?: string };
   if (!created.id) throw new Error(created.detail ?? "Replicate a refusé la demande");
+
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
