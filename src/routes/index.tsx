@@ -577,6 +577,17 @@ function MessageRow({
             />
             {output && isFailure(output) && <ToolError result={output} />}
             {output && !isFailure(output) && part.type === "tool-run_code" && <CodeOutput result={output} />}
+            {output && !isFailure(output) && part.type === "tool-render_chart" && (
+              <ChartResult data={output as unknown as ChartData} />
+            )}
+            {output &&
+              !isFailure(output) &&
+              (part.type === "tool-deep_research" || part.type === "tool-delegate") &&
+              typeof output["report"] === "string" && (
+                <div className="rounded-xl border border-border bg-card p-3">
+                  <Markdown>{output["report"] as string}</Markdown>
+                </div>
+              )}
             {output && !isFailure(output) && typeof output["url"] === "string" && (
               <MediaResult result={output} />
             )}
