@@ -3,6 +3,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   ArrowUp,
+  BarChart3,
+  Microscope,
+  Users,
   CheckCircle2,
   Circle,
   Clock,
@@ -28,6 +31,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Markdown } from "@/components/deerflow/Markdown";
 import { CodeOutput, isFailure, MediaResult, ToolError } from "@/components/deerflow/MediaResult";
+import { ChartResult, type ChartData } from "@/components/deerflow/ChartResult";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -68,6 +72,7 @@ const SUGGESTIONS = [
 
 type Artifact = { path: string; language: string; content: string };
 type PlanStep = { step: string; done: boolean };
+type AppBuild = { name: string; previewUrl: string; files: Array<{ path: string; content: string }> };
 type Capability = {
   id: string;
   label: string;
@@ -90,8 +95,11 @@ function Workspace() {
   const { messages, sendMessage, status, stop, error } = useChat({ transport });
 
   const busy = status === "submitted" || status === "streaming";
-  const { artifacts, plan, previewUrl } = useMemo(() => collectState(messages), [messages]);
+  const { artifacts, plan, previewUrl, app } = useMemo(() => collectState(messages), [messages]);
   const current = artifacts.find((a) => a.path === openArtifact) ?? null;
+  const [tab, setTab] = useState<"preview" | "code">("preview");
+  const [openFile, setOpenFile] = useState<string | null>(null);
+  const appFile = app?.files.find((f) => f.path === openFile) ?? app?.files[0] ?? null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -270,7 +278,7 @@ function Workspace() {
         </main>
 
         <aside
-          className={`${panel ? "fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw]" : "hidden"} shrink-0 flex-col gap-5 overflow-y-auto border-l border-border bg-sidebar p-4 lg:static lg:flex lg:w-80`}
+          className={`${panel ? "fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw]" : "hidden"} shrink-0 flex-col gap-5 overflow-y-auto border-l border-border bg-sidebar p-4 lg:static lg:flex ${app ? "lg:w-[34rem]" : "lg:w-80"}`}
         >
           <button
             onClick={() => setPanel(false)}
@@ -280,7 +288,63 @@ function Workspace() {
             <X className="size-4" />
           </button>
 
-          {previewUrl && (
+          {app && (
+            <section>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <SectionTitle icon={<Monitor className="size-3.5" />}>{app.name}</SectionTitle>
+                <div className="mb-2 flex rounded-md border border-border bg-card p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setTab("preview")}
+                    className={`rounded px-2 py-1 ${tab === "preview" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  >
+                    Aperçu
+                  </button>
+                  <button
+                    onClick={() => setTab("code")}
+                    className={`rounded px-2 py-1 ${tab === "code" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  >
+                    Code
+                  </button>
+                </div>
+              </div>
+              {tab === "preview" ? (
+                <>
+                  <iframe
+                    src={app.previewUrl}
+                    title={app.name}
+                    className="h-[26rem] w-full rounded-lg border border-border bg-white"
+                  />
+                  <a
+                    href={app.previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block truncate text-[11px] text-primary hover:underline"
+                  >
+                    Ouvrir dans un onglet ↗
+                  </a>
+                </>
+              ) : (
+                <div className="rounded-lg border border-border bg-card">
+                  <div className="flex gap-1 overflow-x-auto border-b border-border p-1.5">
+                    {app.files.map((f) => (
+                      <button
+                        key={f.path}
+                        onClick={() => setOpenFile(f.path)}
+                        className={`shrink-0 rounded px-2 py-1 text-[11px] ${appFile?.path === f.path ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                      >
+                        {f.path}
+                      </button>
+                    ))}
+                  </div>
+                  <pre className="max-h-[24rem] overflow-auto p-3 text-[11px] whitespace-pre-wrap">
+                    {appFile?.content ?? ""}
+                  </pre>
+                </div>
+              )}
+            </section>
+          )}
+
+          {previewUrl && !app && (
             <section>
               <SectionTitle icon={<Monitor className="size-3.5" />}>Aperçu en direct</SectionTitle>
               <iframe
@@ -433,6 +497,10 @@ const TOOL_LABELS: Record<string, { icon: React.ReactNode; label: string; field?
   "tool-recall": { icon: <Brain className="size-3.5" />, label: "Rappel mémoire", field: "query" },
   "tool-schedule_task": { icon: <Clock className="size-3.5" />, label: "Tâche programmée", field: "title" },
   "tool-list_tasks": { icon: <Clock className="size-3.5" />, label: "Tâches programmées" },
+  "tool-render_chart": { icon: <BarChart3 className="size-3.5" />, label: "Graphique", field: "title" },
+  "tool-build_app": { icon: <Monitor className="size-3.5" />, label: "Construction d'app", field: "name" },
+  "tool-deep_research": { icon: <Microscope className="size-3.5" />, label: "Deep research", field: "question" },
+  "tool-delegate": { icon: <Users className="size-3.5" />, label: "Sous-agent", field: "role" },
 };
 
 function MessageRow({
@@ -512,6 +580,17 @@ function MessageRow({
             />
             {output && isFailure(output) && <ToolError result={output} />}
             {output && !isFailure(output) && part.type === "tool-run_code" && <CodeOutput result={output} />}
+            {output && !isFailure(output) && part.type === "tool-render_chart" && (
+              <ChartResult data={output as unknown as ChartData} />
+            )}
+            {output &&
+              !isFailure(output) &&
+              (part.type === "tool-deep_research" || part.type === "tool-delegate") &&
+              typeof output["report"] === "string" && (
+                <div className="rounded-xl border border-border bg-card p-3">
+                  <Markdown>{output["report"] as string}</Markdown>
+                </div>
+              )}
             {output && !isFailure(output) && typeof output["url"] === "string" && (
               <MediaResult result={output} />
             )}
@@ -545,6 +624,7 @@ function collectState(messages: UIMessage[]) {
   const artifacts: Artifact[] = [];
   let plan: PlanStep[] = [];
   let previewUrl: string | null = null;
+  let app: AppBuild | null = null;
   for (const m of messages) {
     for (const part of m.parts) {
       if (part.type === "tool-write_artifact") {
@@ -568,7 +648,11 @@ function collectState(messages: UIMessage[]) {
         const out = (part as unknown as { output?: { previewUrl?: string } }).output;
         if (out?.previewUrl) previewUrl = out.previewUrl;
       }
+      if (part.type === "tool-build_app") {
+        const out = (part as unknown as { output?: AppBuild }).output;
+        if (out?.previewUrl && Array.isArray(out.files)) app = out;
+      }
     }
   }
-  return { artifacts, plan, previewUrl };
+  return { artifacts, plan, previewUrl, app };
 }

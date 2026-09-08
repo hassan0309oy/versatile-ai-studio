@@ -24,6 +24,7 @@ const EXT: Record<string, string> = {
   "video/mp4": "mp4",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
   "application/pdf": "pdf",
+  "text/html": "html",
 };
 
 /** Persist a generated media file and return a long-lived signed URL. */
