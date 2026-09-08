@@ -69,6 +69,7 @@ const SUGGESTIONS = [
 
 type Artifact = { path: string; language: string; content: string };
 type PlanStep = { step: string; done: boolean };
+type AppBuild = { name: string; previewUrl: string; files: Array<{ path: string; content: string }> };
 type Capability = {
   id: string;
   label: string;
