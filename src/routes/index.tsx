@@ -621,6 +621,7 @@ function collectState(messages: UIMessage[]) {
   const artifacts: Artifact[] = [];
   let plan: PlanStep[] = [];
   let previewUrl: string | null = null;
+  let app: AppBuild | null = null;
   for (const m of messages) {
     for (const part of m.parts) {
       if (part.type === "tool-write_artifact") {
