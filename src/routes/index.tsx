@@ -275,7 +275,7 @@ function Workspace() {
         </main>
 
         <aside
-          className={`${panel ? "fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw]" : "hidden"} shrink-0 flex-col gap-5 overflow-y-auto border-l border-border bg-sidebar p-4 lg:static lg:flex lg:w-80`}
+          className={`${panel ? "fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw]" : "hidden"} shrink-0 flex-col gap-5 overflow-y-auto border-l border-border bg-sidebar p-4 lg:static lg:flex ${app ? "lg:w-[34rem]" : "lg:w-80"}`}
         >
           <button
             onClick={() => setPanel(false)}
@@ -285,7 +285,63 @@ function Workspace() {
             <X className="size-4" />
           </button>
 
-          {previewUrl && (
+          {app && (
+            <section>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <SectionTitle icon={<Monitor className="size-3.5" />}>{app.name}</SectionTitle>
+                <div className="mb-2 flex rounded-md border border-border bg-card p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setTab("preview")}
+                    className={`rounded px-2 py-1 ${tab === "preview" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  >
+                    Aperçu
+                  </button>
+                  <button
+                    onClick={() => setTab("code")}
+                    className={`rounded px-2 py-1 ${tab === "code" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  >
+                    Code
+                  </button>
+                </div>
+              </div>
+              {tab === "preview" ? (
+                <>
+                  <iframe
+                    src={app.previewUrl}
+                    title={app.name}
+                    className="h-[26rem] w-full rounded-lg border border-border bg-white"
+                  />
+                  <a
+                    href={app.previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block truncate text-[11px] text-primary hover:underline"
+                  >
+                    Ouvrir dans un onglet ↗
+                  </a>
+                </>
+              ) : (
+                <div className="rounded-lg border border-border bg-card">
+                  <div className="flex gap-1 overflow-x-auto border-b border-border p-1.5">
+                    {app.files.map((f) => (
+                      <button
+                        key={f.path}
+                        onClick={() => setOpenFile(f.path)}
+                        className={`shrink-0 rounded px-2 py-1 text-[11px] ${appFile?.path === f.path ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                      >
+                        {f.path}
+                      </button>
+                    ))}
+                  </div>
+                  <pre className="max-h-[24rem] overflow-auto p-3 text-[11px] whitespace-pre-wrap">
+                    {appFile?.content ?? ""}
+                  </pre>
+                </div>
+              )}
+            </section>
+          )}
+
+          {previewUrl && !app && (
             <section>
               <SectionTitle icon={<Monitor className="size-3.5" />}>Aperçu en direct</SectionTitle>
               <iframe
