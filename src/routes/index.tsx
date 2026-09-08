@@ -644,7 +644,11 @@ function collectState(messages: UIMessage[]) {
         const out = (part as unknown as { output?: { previewUrl?: string } }).output;
         if (out?.previewUrl) previewUrl = out.previewUrl;
       }
+      if (part.type === "tool-build_app") {
+        const out = (part as unknown as { output?: AppBuild }).output;
+        if (out?.previewUrl && Array.isArray(out.files)) app = out;
+      }
     }
   }
-  return { artifacts, plan, previewUrl };
+  return { artifacts, plan, previewUrl, app };
 }
