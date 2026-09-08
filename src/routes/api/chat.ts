@@ -59,7 +59,7 @@ export const Route = createFileRoute("/api/chat")({
           model: gateway(modelId),
           system: SYSTEM_PROMPT,
           messages: await convertToModelMessages(messages as UIMessage[]),
-          tools: { ...deerflowTools, ...mediaTools, ...mcp.tools },
+          tools: { ...deerflowTools, ...mediaTools, ...agentTools, ...mcp.tools },
           stopWhen: stepCountIs(50),
           onFinish: () => {
             void mcp.close();
