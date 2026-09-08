@@ -494,6 +494,10 @@ const TOOL_LABELS: Record<string, { icon: React.ReactNode; label: string; field?
   "tool-recall": { icon: <Brain className="size-3.5" />, label: "Rappel mémoire", field: "query" },
   "tool-schedule_task": { icon: <Clock className="size-3.5" />, label: "Tâche programmée", field: "title" },
   "tool-list_tasks": { icon: <Clock className="size-3.5" />, label: "Tâches programmées" },
+  "tool-render_chart": { icon: <BarChart3 className="size-3.5" />, label: "Graphique", field: "title" },
+  "tool-build_app": { icon: <Monitor className="size-3.5" />, label: "Construction d'app", field: "name" },
+  "tool-deep_research": { icon: <Microscope className="size-3.5" />, label: "Deep research", field: "question" },
+  "tool-delegate": { icon: <Users className="size-3.5" />, label: "Sous-agent", field: "role" },
 };
 
 function MessageRow({
