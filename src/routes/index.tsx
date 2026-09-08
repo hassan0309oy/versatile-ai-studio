@@ -28,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Markdown } from "@/components/deerflow/Markdown";
 import { CodeOutput, isFailure, MediaResult, ToolError } from "@/components/deerflow/MediaResult";
+import { ChartResult, type ChartData } from "@/components/deerflow/ChartResult";
 
 export const Route = createFileRoute("/")({
   head: () => ({
