@@ -92,8 +92,11 @@ function Workspace() {
   const { messages, sendMessage, status, stop, error } = useChat({ transport });
 
   const busy = status === "submitted" || status === "streaming";
-  const { artifacts, plan, previewUrl } = useMemo(() => collectState(messages), [messages]);
+  const { artifacts, plan, previewUrl, app } = useMemo(() => collectState(messages), [messages]);
   const current = artifacts.find((a) => a.path === openArtifact) ?? null;
+  const [tab, setTab] = useState<"preview" | "code">("preview");
+  const [openFile, setOpenFile] = useState<string | null>(null);
+  const appFile = app?.files.find((f) => f.path === openFile) ?? app?.files[0] ?? null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
