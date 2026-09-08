@@ -6,6 +6,7 @@ import { deerflowTools } from "@/lib/deerflow-tools.server";
 import { loadMcpTools } from "@/lib/providers/mcp.server";
 import { readPreferences } from "@/lib/providers/settings.server";
 import { mediaTools } from "@/lib/media-tools.server";
+import { agentTools } from "@/lib/agent-tools.server";
 
 
 const SYSTEM_PROMPT = `Tu es DeerFlow, un super-agent autonome francophone.
