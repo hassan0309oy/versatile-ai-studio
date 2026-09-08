@@ -3,6 +3,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   ArrowUp,
+  BarChart3,
+  Microscope,
+  Users,
   CheckCircle2,
   Circle,
   Clock,
