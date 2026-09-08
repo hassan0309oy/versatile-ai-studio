@@ -1,4 +1,4 @@
-import { tool, generateText, stepCountIs } from "ai";
+import { tool, generateText, stepCountIs, type ToolSet } from "ai";
 import { z } from "zod";
 
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
@@ -88,7 +88,7 @@ export const renderChartTool = tool({
 async function runSubAgent(params: {
   role: string;
   instruction: string;
-  tools: Record<string, unknown>;
+  tools: ToolSet;
   model?: string | undefined;
   steps?: number;
 }) {
@@ -103,7 +103,7 @@ async function runSubAgent(params: {
 Exécute la mission avec les outils réels dont tu disposes, sans jamais simuler un résultat.
 Rends un compte rendu final en français, structuré en markdown, avec les liens/sources et les URL des fichiers produits.`,
     prompt: params.instruction,
-    tools: params.tools as never,
+    tools: params.tools,
     stopWhen: stepCountIs(params.steps ?? 25),
   });
   return { role: params.role, model: modelId, report: result.text, steps: result.steps.length };
@@ -115,7 +115,7 @@ const RESEARCH_TOOLS = {
   browse_web: mediaTools.browse_web,
 };
 
-const SUBAGENT_TOOLSETS: Record<string, Record<string, unknown>> = {
+const SUBAGENT_TOOLSETS: Record<string, ToolSet> = {
   recherche: RESEARCH_TOOLS,
   media: {
     generate_image: mediaTools.generate_image,
